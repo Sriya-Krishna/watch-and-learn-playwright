@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Workflow Interpreter — Upload</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #faf8f5;
+      color: #2d2a26;
+      padding: 32px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    h1 { font-size: 22px; margin-bottom: 6px; color: #1a1816; }
+    .subtitle { font-size: 13px; color: #a09890; margin-bottom: 24px; }
+    .section {
+      background: #fff;
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 16px;
+      border: 1px solid #ece6df;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .section h2 {
+      font-size: 15px;
+      color: #e06820;
+      margin-bottom: 12px;
+    }
+    .tab-row {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 16px;
+    }
+    .tab {
+      padding: 8px 16px;
+      border: 1px solid #ddd6ce;
+      border-radius: 6px 6px 0 0;
+      background: #fdf9f5;
+      color: #a09890;
+      font-size: 13px;
+      cursor: pointer;
+      border-bottom: none;
+      transition: all 0.15s;
+    }
+    .tab:hover { color: #e06820; }
+    .tab.active {
+      background: #fff;
+      color: #2d2a26;
+      border-color: #ece6df;
+    }
+    textarea {
+      width: 100%;
+      min-height: 300px;
+      padding: 12px;
+      border: 1px solid #ddd6ce;
+      border-radius: 8px;
+      background: #fdf9f5;
+      color: #5d5650;
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+      font-size: 12px;
+      resize: vertical;
+    }
+    textarea:focus { outline: none; border-color: #e06820; }
+    .drop-zone {
+      border: 2px dashed #ddd6ce;
+      border-radius: 8px;
+      padding: 40px;
+      text-align: center;
+      color: #a09890;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: #e06820;
+      color: #6d6560;
+      background: #fff8f0;
+    }
+    .drop-zone input[type="file"] { display: none; }
+    .file-name {
+      margin-top: 10px;
+      font-size: 13px;
+      color: #e06820;
+    }
+    .btn {
+      padding: 12px 32px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      margin-top: 16px;
+    }
+    .btn-primary { background: #e06820; color: #fff; }
+    .btn-primary:hover { background: #cc5a16; }
+    .btn-primary:disabled { background: #e0dcd6; cursor: not-allowed; color: #a09890; }
+    .error {
+      margin-top: 12px;
+      padding: 10px;
+      border-radius: 6px;
+      background: #fce4ec;
+      color: #c62828;
+      font-size: 13px;
+      display: none;
+    }
+    .status-msg {
+      margin-top: 12px;
+      font-size: 13px;
+      color: #a09890;
+    }
+    .event-count {
+      font-size: 12px;
+      color: #a09890;
+      margin-top: 8px;
+    }
+    .event-count strong { color: #e06820; }
+    .model-select {
+      margin-bottom: 20px;
+    }
+    .model-select label {
+      font-size: 13px;
+      color: #a09890;
+      margin-right: 10px;
+    }
+    .model-select select {
+      padding: 8px 12px;
+      border: 1px solid #ddd6ce;
+      border-radius: 8px;
+      background: #fff;
+      color: #e06820;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .model-select select:focus {
+      outline: none;
+      border-color: #e06820;
+    }
+  </style>
+</head>
+<body>
+  <h1>Workflow Interpreter</h1>
+  <div class="subtitle">Upload or paste a recording JSON to interpret</div>
+
+  <div class="model-select">
+    <label for="providerSelect">Model</label>
+    <select id="providerSelect">
+      {% for key, name in models.items() %}
+      <option value="{{ key }}" {% if key == default_provider %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="section">
+    <div class="tab-row">
+      <div class="tab active" onclick="switchTab('paste')">Paste JSON</div>
+      <div class="tab" onclick="switchTab('upload')">Upload File</div>
+    </div>
+
+    <!-- Paste tab -->
+    <div id="pasteTab">
+      <textarea id="jsonInput" placeholder='Paste your recording JSON array here...
+[
+  {
+    "timestamp": "...",
+    "eventType": "click",
+    "url": "...",
+    "pageTitle": "...",
+    "data": { ... }
+  },
+  ...
+]'></textarea>
+      <div class="event-count" id="pasteCount"></div>
+    </div>
+
+    <!-- Upload tab -->
+    <div id="uploadTab" style="display:none;">
+      <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+        Drop a .json file here or click to browse
+        <input type="file" id="fileInput" accept=".json">
+      </div>
+      <div class="file-name" id="fileName"></div>
+      <div class="event-count" id="uploadCount"></div>
+    </div>
+
+    <button class="btn btn-primary" id="interpretBtn" onclick="interpret()">Interpret Recording</button>
+    <div class="error" id="error"></div>
+    <div class="status-msg" id="status"></div>
+  </div>
+
+  <script>
+    let currentEvents = null;
+    let activeTab = 'paste';
+
+    function switchTab(tab) {
+      activeTab = tab;
+      document.querySelectorAll('.tab').forEach((t, i) => {
+        t.classList.toggle('active', (i === 0 && tab === 'paste') || (i === 1 && tab === 'upload'));
+      });
+      document.getElementById('pasteTab').style.display = tab === 'paste' ? 'block' : 'none';
+      document.getElementById('uploadTab').style.display = tab === 'upload' ? 'block' : 'none';
+    }
+
+    // Paste tab — validate on input
+    document.getElementById('jsonInput').addEventListener('input', (e) => {
+      const countEl = document.getElementById('pasteCount');
+      try {
+        const parsed = JSON.parse(e.target.value);
+        if (Array.isArray(parsed)) {
+          countEl.innerHTML = `<strong>${parsed.length}</strong> events detected`;
+          currentEvents = parsed;
+        } else {
+          countEl.textContent = 'JSON must be an array';
+          currentEvents = null;
+        }
+      } catch {
+        countEl.textContent = e.target.value.trim() ? 'Invalid JSON' : '';
+        currentEvents = null;
+      }
+    });
+
+    // Upload tab — file input
+    const fileInput = document.getElementById('fileInput');
+    const dropZone = document.getElementById('dropZone');
+
+    fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
+
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+
+    function handleFile(file) {
+      if (!file) return;
+      document.getElementById('fileName').textContent = file.name;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const parsed = JSON.parse(e.target.result);
+          if (Array.isArray(parsed)) {
+            currentEvents = parsed;
+            document.getElementById('uploadCount').innerHTML = `<strong>${parsed.length}</strong> events detected`;
+          } else {
+            document.getElementById('uploadCount').textContent = 'JSON must be an array';
+            currentEvents = null;
+          }
+        } catch {
+          document.getElementById('uploadCount').textContent = 'Invalid JSON file';
+          currentEvents = null;
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    async function interpret() {
+      // If on paste tab, try parsing current textarea value
+      if (activeTab === 'paste') {
+        try {
+          currentEvents = JSON.parse(document.getElementById('jsonInput').value);
+        } catch { }
+      }
+
+      const errorEl = document.getElementById('error');
+      const statusEl = document.getElementById('status');
+      errorEl.style.display = 'none';
+
+      if (!currentEvents || !Array.isArray(currentEvents) || currentEvents.length === 0) {
+        errorEl.textContent = 'Please provide a valid JSON array with at least one event.';
+        errorEl.style.display = 'block';
+        return;
+      }
+
+      const btn = document.getElementById('interpretBtn');
+      btn.disabled = true;
+      btn.textContent = 'Interpreting...';
+      statusEl.textContent = `Sending ${currentEvents.length} events to interpreter...`;
+
+      try {
+        const provider = document.getElementById('providerSelect').value;
+        const res = await fetch('/interpret', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ events: currentEvents, provider })
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail || `HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+        statusEl.textContent = 'Redirecting to session...';
+        window.location.href = `/session/${data.sessionId}`;
+      } catch (err) {
+        errorEl.textContent = `Error: ${err.message}`;
+        errorEl.style.display = 'block';
+        statusEl.textContent = '';
+        btn.disabled = false;
+        btn.textContent = 'Interpret Recording';
+      }
+    }
+  </script>
+</body>
+</html>

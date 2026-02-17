@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 320px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      padding: 16px;
+      background: #1a1a2e;
+      color: #e0e0e0;
+    }
+    h1 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #fff;
+      text-align: center;
+    }
+    .status {
+      text-align: center;
+      font-size: 13px;
+      margin-bottom: 12px;
+      color: #888;
+    }
+    .status.recording {
+      color: #ff4444;
+      font-weight: 600;
+    }
+    #toggleBtn {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      color: #fff;
+      background: #4a4a6a;
+    }
+    #toggleBtn.recording {
+      background: #ff4444;
+      animation: pulse 1.5s infinite;
+    }
+    #toggleBtn:hover { opacity: 0.9; }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(255, 68, 68, 0.4); }
+      50% { box-shadow: 0 0 0 8px rgba(255, 68, 68, 0); }
+    }
+    .results {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid #333;
+      display: none;
+    }
+    .results.visible { display: block; }
+    .event-count {
+      text-align: center;
+      font-size: 13px;
+      margin-bottom: 10px;
+      color: #aaa;
+    }
+    .event-count strong { color: #7c7cff; }
+    .btn-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+    .btn-row button {
+      flex: 1;
+      padding: 8px;
+      border: 1px solid #444;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      background: #2a2a4a;
+      color: #ccc;
+      transition: all 0.15s;
+    }
+    .btn-row button:hover { background: #3a3a5a; color: #fff; }
+    #sendBtn {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      background: #5a5aff;
+      color: #fff;
+    }
+    #sendBtn:hover { background: #4a4aee; }
+    #sendBtn:disabled { background: #444; cursor: not-allowed; }
+    .toast {
+      text-align: center;
+      font-size: 12px;
+      margin-top: 8px;
+      color: #6f6;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>Workflow Recorder</h1>
+  <div id="status" class="status">Ready to record</div>
+  <button id="toggleBtn">Start Recording</button>
+  <div id="results" class="results">
+    <div class="event-count">Captured <strong id="eventCount">0</strong> events</div>
+    <div class="btn-row">
+      <button id="copyBtn">Copy JSON</button>
+      <button id="downloadBtn">Download JSON</button>
+    </div>
+    <button id="sendBtn">Send to Interpreter</button>
+    <div id="toast" class="toast"></div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

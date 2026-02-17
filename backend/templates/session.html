@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Workflow — {{ session_id[:8] }}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #faf8f5;
+      color: #2d2a26;
+      padding: 32px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    h1 { font-size: 22px; margin-bottom: 6px; color: #1a1816; }
+    h2 { font-size: 15px; color: #e06820; margin-bottom: 12px; }
+    .header-row { display: flex; align-items: center; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; }
+    .session-id { font-size: 12px; color: #a09890; }
+    .badge {
+      display: inline-block; padding: 4px 12px; border-radius: 12px;
+      font-size: 12px; font-weight: 600;
+    }
+    .badge-status { background: #fff3e0; color: #e06820; }
+    .badge-status.confirmed { background: #e8f5e9; color: #2e7d32; }
+    .badge-status.generated { background: #e3f2fd; color: #1565c0; }
+    .badge-status.deployed { background: #f3e5f5; color: #7b1fa2; }
+    .badge-status.active { background: #e8f5e9; color: #2e7d32; }
+    .badge-model { background: #fff3e0; color: #e06820; border: 1px solid #ffd9b3; }
+    .badge-n8n { background: #f5f5f5; color: #999; border: 1px solid #e0e0e0; }
+    .badge-n8n.connected { color: #2e7d32; border-color: #a5d6a7; background: #e8f5e9; }
+
+    /* Steps indicator */
+    .steps-bar { display: flex; gap: 4px; margin-bottom: 24px; }
+    .step-dot {
+      flex: 1; height: 4px; border-radius: 2px; background: #e8e4df;
+      transition: background 0.3s;
+    }
+    .step-dot.done { background: #e06820; }
+    .step-dot.current { background: #ff9a3c; }
+
+    .section {
+      background: #fff; border-radius: 10px; padding: 20px;
+      margin-bottom: 16px; border: 1px solid #ece6df;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .summary { font-size: 16px; line-height: 1.6; color: #3d3832; }
+
+    .step-card {
+      padding: 12px; background: #fdf9f5; border-radius: 8px;
+      margin-bottom: 8px; border-left: 3px solid #e06820;
+    }
+    .step-order { font-size: 11px; color: #a09890; text-transform: uppercase; margin-bottom: 4px; }
+    .step-action { font-size: 14px; color: #2d2a26; }
+    .step-meta { font-size: 12px; color: #a09890; margin-top: 4px; }
+
+    .confidence { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+    .conf-high { background: #e8f5e9; color: #2e7d32; }
+    .conf-med { background: #fff8e1; color: #f9a825; }
+    .conf-low { background: #fce4ec; color: #c62828; }
+
+    .trigger-box {
+      display: flex; align-items: center; gap: 12px; padding: 12px;
+      background: #fdf9f5; border-radius: 8px;
+    }
+    .trigger-app { font-weight: 600; color: #e06820; }
+
+    .question-card {
+      background: #fdf9f5; border: 1px solid #ece6df; border-radius: 8px;
+      padding: 16px; margin-bottom: 12px;
+    }
+    .question-text { font-size: 14px; margin-bottom: 8px; color: #2d2a26; }
+    .question-why { font-size: 12px; color: #a09890; margin-bottom: 10px; }
+    .question-card select, .question-card input[type="text"] {
+      width: 100%; padding: 8px 12px; border: 1px solid #ddd6ce; border-radius: 6px;
+      background: #fff; color: #2d2a26; font-size: 13px;
+    }
+    .question-card select:focus, .question-card input:focus { outline: none; border-color: #e06820; }
+
+    .additional-input { margin-top: 16px; padding-top: 16px; border-top: 1px solid #ece6df; }
+    .additional-input label { display: block; font-size: 13px; color: #a09890; margin-bottom: 8px; }
+    .additional-input textarea, textarea.notes {
+      width: 100%; min-height: 80px; padding: 10px 12px; border: 1px solid #ddd6ce;
+      border-radius: 6px; background: #fff; color: #2d2a26; font-size: 13px;
+      font-family: inherit; resize: vertical;
+    }
+    .additional-input textarea:focus, textarea.notes:focus { outline: none; border-color: #e06820; }
+
+    .btn {
+      padding: 10px 24px; border: none; border-radius: 8px; font-size: 14px;
+      font-weight: 600; cursor: pointer; transition: all 0.15s;
+    }
+    .btn:disabled { background: #e0dcd6 !important; cursor: not-allowed; color: #a09890 !important; }
+    .btn-primary { background: #e06820; color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: #cc5a16; }
+    .btn-green { background: #e06820; color: #fff; }
+    .btn-green:hover:not(:disabled) { background: #cc5a16; }
+    .btn-outline { background: transparent; border: 1px solid #ddd6ce; color: #6d6560; }
+    .btn-outline:hover:not(:disabled) { border-color: #e06820; color: #e06820; }
+    .btn-row { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+
+    /* Node flow visualization */
+    .node-flow { display: flex; align-items: center; gap: 8px; overflow-x: auto; padding: 16px 0; }
+    .node-box {
+      padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+      white-space: nowrap; min-width: 120px; text-align: center;
+    }
+    .node-trigger { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+    .node-action { background: #fff3e0; color: #e06820; border: 1px solid #ffd9b3; }
+    .node-logic { background: #fff8e1; color: #f57f17; border: 1px solid #ffe082; }
+    .node-arrow { color: #ccc5bd; font-size: 18px; }
+
+    .validation-badge { padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 600; }
+    .validation-pass { background: #e8f5e9; color: #2e7d32; }
+    .validation-fail { background: #fce4ec; color: #c62828; }
+
+    .cred-list { list-style: none; }
+    .cred-item {
+      padding: 10px 12px; background: #fdf9f5; border-radius: 6px;
+      margin-bottom: 6px; font-size: 13px; border-left: 3px solid #e06820;
+    }
+
+    .json-block {
+      background: #fdf9f5; border: 1px solid #ece6df; border-radius: 8px;
+      padding: 16px; font-family: 'SF Mono', Monaco, monospace; font-size: 12px;
+      overflow-x: auto; white-space: pre-wrap; color: #5d5650;
+      max-height: 400px; overflow-y: auto;
+    }
+    .collapsible-header {
+      cursor: pointer; font-size: 13px; color: #a09890; padding: 8px 0;
+      user-select: none;
+    }
+    .collapsible-header:hover { color: #e06820; }
+
+    .success-box {
+      text-align: center; padding: 32px; background: #fff8f0; border-radius: 12px;
+      border: 1px solid #ffd9b3;
+    }
+    .success-box h2 { color: #e06820; font-size: 20px; margin-bottom: 8px; }
+    .success-box p { color: #6d6560; font-size: 14px; margin-bottom: 16px; }
+    .success-box a { color: #e06820; text-decoration: none; }
+    .success-box a:hover { text-decoration: underline; }
+
+    .loading { text-align: center; padding: 48px; }
+    .loading .spinner {
+      width: 40px; height: 40px; border: 3px solid #ece6df; border-top-color: #e06820;
+      border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading p { color: #a09890; font-size: 14px; }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+    <h1>Workflow Builder</h1>
+    <a href="/" class="btn btn-outline" style="text-decoration:none; font-size:12px; padding:6px 14px;">Upload JSON</a>
+  </div>
+  <div class="header-row">
+    <span class="session-id">{{ session_id }}</span>
+    <span class="badge badge-status" id="statusBadge">{{ status }}</span>
+    <span class="badge badge-model">{{ model_name }}</span>
+    <span class="badge badge-n8n" id="n8nBadge">n8n: checking...</span>
+  </div>
+
+  <!-- Steps progress bar -->
+  <div class="steps-bar">
+    <div class="step-dot" id="dot-intent"></div>
+    <div class="step-dot" id="dot-generate"></div>
+    <div class="step-dot" id="dot-deploy"></div>
+    <div class="step-dot" id="dot-active"></div>
+  </div>
+
+  <!-- ============ STEP 1: Intent Review + Clarification ============ -->
+  <div id="step-intent">
+    <div class="section">
+      <h2>What this workflow does</h2>
+      <div class="summary" id="intentSummary"></div>
+    </div>
+
+    <div class="section" id="triggerSection">
+      <h2>Trigger</h2>
+      <div class="trigger-box" id="triggerBox"></div>
+    </div>
+
+    <div class="section">
+      <h2>Steps</h2>
+      <div id="stepsList"></div>
+    </div>
+
+    <div class="section" id="questionsSection" class="hidden">
+      <h2>Clarifying Questions</h2>
+      <div id="questionsList"></div>
+      <div class="additional-input">
+        <label for="additionalNotes">Anything else you'd like to add or correct?</label>
+        <textarea id="additionalNotes" placeholder='e.g. "I only want this to run on weekdays"'></textarea>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="submitAnswersBtn" onclick="submitAnswers()">Submit Answers</button>
+        <button class="btn btn-outline" onclick="confirmIntent()">Confirm Intent As-Is</button>
+      </div>
+    </div>
+
+    <div id="confirmedActions" class="hidden">
+      <div class="btn-row">
+        <button class="btn btn-green" id="generateBtn" onclick="generateWorkflow()">Generate n8n Workflow</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ STEP 2: Generating (loading) ============ -->
+  <div id="step-generating" class="hidden">
+    <div class="loading">
+      <div class="spinner"></div>
+      <p>Generating n8n workflow from your intent...</p>
+      <p style="font-size:12px; color:#666; margin-top:8px;">This may take 15-30 seconds</p>
+    </div>
+  </div>
+
+  <!-- ============ STEP 3: Workflow Generated ============ -->
+  <div id="step-generated" class="hidden">
+    <div class="section">
+      <h2>Generated Workflow</h2>
+      <div class="node-flow" id="nodeFlow"></div>
+    </div>
+
+    <div class="section">
+      <h2>Validation</h2>
+      <span class="validation-badge" id="validationBadge"></span>
+      <div id="validationDetails" style="margin-top:10px; font-size:13px;"></div>
+    </div>
+
+    <div class="section" id="credSection">
+      <h2>Credentials Needed</h2>
+      <ul class="cred-list" id="credList"></ul>
+    </div>
+
+    <div class="section">
+      <div class="collapsible-header" onclick="toggleJson()">▶ Show Raw Workflow JSON</div>
+      <pre class="json-block hidden" id="workflowJson"></pre>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-green" id="deployBtn" onclick="deployWorkflow()">Deploy to n8n</button>
+      <a class="btn btn-outline" id="downloadBtn" style="text-decoration:none; text-align:center;">Download JSON</a>
+    </div>
+  </div>
+
+  <!-- ============ STEP 4: Deployed ============ -->
+  <div id="step-deployed" class="hidden">
+    <div class="success-box">
+      <h2>Workflow Deployed</h2>
+      <p>Your workflow has been created in n8n.</p>
+      <a id="n8nLink" href="#" target="_blank">Open in n8n →</a>
+    </div>
+
+    <div class="section" style="margin-top:16px;">
+      <h2>Set Up Credentials</h2>
+      <p style="font-size:13px; color:#aaa; margin-bottom:12px;">Before activating, connect these accounts in n8n:</p>
+      <ul class="cred-list" id="deployCredList"></ul>
+      <p style="font-size:12px; color:#666; margin-top:12px;">
+        Go to n8n → Settings → Credentials → Add the required credentials, then open the workflow and assign them to each node.
+      </p>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-green" id="activateBtn" onclick="activateWorkflow()">Activate Workflow</button>
+      <a class="btn btn-outline" id="n8nLinkBtn" href="#" target="_blank" style="text-decoration:none; text-align:center;">View in n8n</a>
+    </div>
+  </div>
+
+  <!-- ============ STEP 5: Active ============ -->
+  <div id="step-active" class="hidden">
+    <div class="success-box">
+      <h2>Your Workflow is Live!</h2>
+      <p id="activeSummary"></p>
+      <a id="activeN8nLink" href="#" target="_blank">Monitor in n8n →</a>
+    </div>
+    <div class="btn-row" style="justify-content:center; margin-top:20px;">
+      <a class="btn btn-primary" href="/" style="text-decoration:none;">Record Another Workflow</a>
+    </div>
+  </div>
+
+  <script>
+    const SESSION_ID = "{{ session_id }}";
+    let currentIntent = {{ intent_json | safe }};
+    let currentStatus = "{{ status }}";
+    let currentWorkflow = {{ workflow_json | safe }};
+    let validationResult = {{ validation_json | safe }};
+    let credentialNotes = {{ credential_notes_json | safe }};
+    let n8nWorkflowId = "{{ n8n_workflow_id }}";
+    let n8nUrl = "{{ n8n_url }}";
+    let n8nConnected = false;
+
+    // Check n8n connection on load
+    fetch('/n8n/status').then(r => r.json()).then(data => {
+      n8nConnected = data.connected;
+      const badge = document.getElementById('n8nBadge');
+      badge.textContent = data.connected ? `n8n: ${data.host}` : 'n8n: offline';
+      if (data.connected) badge.classList.add('connected');
+      render();
+    }).catch(() => {
+      document.getElementById('n8nBadge').textContent = 'n8n: offline';
+      render();
+    });
+
+    function confClass(val) {
+      if (val >= 0.8) return 'conf-high';
+      if (val >= 0.5) return 'conf-med';
+      return 'conf-low';
+    }
+
+    function updateDots() {
+      const dots = ['dot-intent', 'dot-generate', 'dot-deploy', 'dot-active'];
+      const statusMap = {
+        'clarifying': 0, 'confirmed': 0,
+        'generating': 1, 'generated': 1,
+        'deployed': 2,
+        'active': 3
+      };
+      const current = statusMap[currentStatus] ?? 0;
+      dots.forEach((id, i) => {
+        const el = document.getElementById(id);
+        el.classList.remove('done', 'current');
+        if (i < current) el.classList.add('done');
+        if (i === current) el.classList.add('current');
+      });
+    }
+
+    function updateStatusBadge() {
+      const badge = document.getElementById('statusBadge');
+      badge.textContent = currentStatus;
+      badge.className = 'badge badge-status';
+      if (['confirmed', 'active'].includes(currentStatus)) badge.classList.add('confirmed');
+      else if (currentStatus === 'generated') badge.classList.add('generated');
+      else if (currentStatus === 'deployed') badge.classList.add('deployed');
+    }
+
+    function render() {
+      updateDots();
+      updateStatusBadge();
+
+      // Hide all steps
+      ['step-intent', 'step-generating', 'step-generated', 'step-deployed', 'step-active']
+        .forEach(id => document.getElementById(id).classList.add('hidden'));
+
+      if (currentStatus === 'clarifying' || currentStatus === 'confirmed') {
+        renderIntent();
+        document.getElementById('step-intent').classList.remove('hidden');
+      } else if (currentStatus === 'generating') {
+        document.getElementById('step-generating').classList.remove('hidden');
+      } else if (currentStatus === 'generated') {
+        renderWorkflow();
+        document.getElementById('step-generated').classList.remove('hidden');
+      } else if (currentStatus === 'deployed') {
+        renderDeployed();
+        document.getElementById('step-deployed').classList.remove('hidden');
+      } else if (currentStatus === 'active') {
+        renderActive();
+        document.getElementById('step-active').classList.remove('hidden');
+      }
+    }
+
+    function renderIntent() {
+      document.getElementById('intentSummary').textContent = currentIntent.intent_summary || '';
+
+      const trigger = currentIntent.trigger;
+      if (trigger) {
+        document.getElementById('triggerBox').innerHTML = `
+          <span class="trigger-app">${trigger.app || 'Unknown'}</span>
+          <span>${trigger.description || ''}</span>
+          <span class="confidence ${confClass(trigger.confidence || 0)}">${Math.round((trigger.confidence || 0) * 100)}%</span>
+        `;
+      }
+
+      const steps = currentIntent.steps || [];
+      document.getElementById('stepsList').innerHTML = steps.map(s => `
+        <div class="step-card">
+          <div class="step-order">Step ${s.order}</div>
+          <div class="step-action">${s.action}
+            <span class="confidence ${confClass(s.confidence || 0)}">${Math.round((s.confidence || 0) * 100)}%</span>
+          </div>
+          <div class="step-meta">${s.app || ''} — ${s.operation || ''} — Fields: ${(s.data_fields || []).join(', ')}</div>
+        </div>
+      `).join('');
+
+      const questions = currentIntent.unresolved_questions || [];
+      const qSection = document.getElementById('questionsSection');
+      const confirmedActions = document.getElementById('confirmedActions');
+
+      if (currentStatus === 'confirmed') {
+        qSection.classList.add('hidden');
+        confirmedActions.classList.remove('hidden');
+      } else if (questions.length > 0) {
+        qSection.classList.remove('hidden');
+        confirmedActions.classList.add('hidden');
+        document.getElementById('questionsList').innerHTML = questions.map(q => `
+          <div class="question-card" data-qid="${q.id}">
+            <div class="question-text">${q.question}</div>
+            <div class="question-why">${q.why || ''}</div>
+            ${q.options && q.options.length > 0
+              ? `<select data-qid="${q.id}">
+                  <option value="">Select an answer...</option>
+                  ${q.options.map(o => `<option value="${o}">${o}</option>`).join('')}
+                  <option value="__custom__">Other (type below)</option>
+                </select>
+                <input type="text" data-qid="${q.id}" placeholder="Or type your answer..." style="margin-top:8px;">`
+              : `<input type="text" data-qid="${q.id}" placeholder="Type your answer...">`
+            }
+          </div>
+        `).join('');
+      } else {
+        qSection.classList.add('hidden');
+        confirmedActions.classList.remove('hidden');
+      }
+    }
+
+    function renderWorkflow() {
+      if (!currentWorkflow) return;
+      const nodes = currentWorkflow.nodes || [];
+
+      // Node flow visualization
+      const flowHtml = nodes.map((n, i) => {
+        const type = (n.type || '').toLowerCase();
+        let cls = 'node-action';
+        if (type.includes('trigger') || type.includes('webhook')) cls = 'node-trigger';
+        else if (type.includes('if') || type.includes('switch') || type.includes('merge')) cls = 'node-logic';
+        const arrow = i < nodes.length - 1 ? '<span class="node-arrow">→</span>' : '';
+        return `<div class="node-box ${cls}">${n.name || n.type}</div>${arrow}`;
+      }).join('');
+      document.getElementById('nodeFlow').innerHTML = flowHtml;
+
+      // Validation
+      const vBadge = document.getElementById('validationBadge');
+      const vDetails = document.getElementById('validationDetails');
+      if (validationResult) {
+        if (validationResult.valid) {
+          vBadge.textContent = 'PASSED';
+          vBadge.className = 'validation-badge validation-pass';
+        } else {
+          vBadge.textContent = 'ISSUES FOUND';
+          vBadge.className = 'validation-badge validation-fail';
+        }
+        let detailHtml = '';
+        if (validationResult.errors?.length) {
+          detailHtml += validationResult.errors.map(e => `<div style="color:#f66; margin-top:4px;">✗ ${e}</div>`).join('');
+        }
+        if (validationResult.warnings?.length) {
+          detailHtml += validationResult.warnings.map(w => `<div style="color:#fc0; margin-top:4px;">⚠ ${w}</div>`).join('');
+        }
+        vDetails.innerHTML = detailHtml;
+      }
+
+      // Credentials
+      if (credentialNotes.length > 0) {
+        document.getElementById('credSection').classList.remove('hidden');
+        document.getElementById('credList').innerHTML = credentialNotes.map(c =>
+          `<li class="cred-item"><strong>${c.service}</strong> — ${c.description}</li>`
+        ).join('');
+      } else {
+        document.getElementById('credSection').classList.add('hidden');
+      }
+
+      // JSON
+      document.getElementById('workflowJson').textContent = JSON.stringify(currentWorkflow, null, 2);
+
+      // Deploy button visibility
+      const deployBtn = document.getElementById('deployBtn');
+      if (!n8nConnected) {
+        deployBtn.disabled = true;
+        deployBtn.textContent = 'Deploy to n8n (offline)';
+      }
+
+      // Download link
+      document.getElementById('downloadBtn').href = `/workflow/${SESSION_ID}/download`;
+    }
+
+    function renderDeployed() {
+      document.getElementById('n8nLink').href = n8nUrl;
+      document.getElementById('n8nLinkBtn').href = n8nUrl;
+      document.getElementById('deployCredList').innerHTML = credentialNotes.map(c =>
+        `<li class="cred-item"><strong>${c.service}</strong> — ${c.description}</li>`
+      ).join('') || '<li class="cred-item" style="border-left-color:#4f4;">No credentials required</li>';
+    }
+
+    function renderActive() {
+      document.getElementById('activeSummary').textContent = currentIntent.intent_summary || '';
+      document.getElementById('activeN8nLink').href = n8nUrl;
+    }
+
+    function toggleJson() {
+      const el = document.getElementById('workflowJson');
+      const header = el.previousElementSibling;
+      el.classList.toggle('hidden');
+      header.textContent = el.classList.contains('hidden') ? '▶ Show Raw Workflow JSON' : '▼ Hide Raw Workflow JSON';
+    }
+
+    // --- Actions ---
+
+    async function submitAnswers() {
+      const answers = {};
+      document.querySelectorAll('.question-card').forEach(card => {
+        const qid = card.dataset.qid;
+        const select = card.querySelector('select');
+        const input = card.querySelector('input[type="text"]');
+        if (select && select.value && select.value !== '__custom__') answers[qid] = select.value;
+        else if (input && input.value.trim()) answers[qid] = input.value.trim();
+      });
+      const notes = document.getElementById('additionalNotes').value.trim();
+      if (notes) answers['_additional_notes'] = notes;
+
+      if (Object.keys(answers).length === 0) { alert('Please answer at least one question or add a note'); return; }
+
+      setBtn('submitAnswersBtn', true, 'Submitting...');
+      try {
+        const res = await fetch('/clarify', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: SESSION_ID, answers })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Failed');
+        currentIntent = data.intent;
+        currentStatus = data.status;
+        render();
+      } catch (err) { alert('Error: ' + err.message); }
+      finally { setBtn('submitAnswersBtn', false, 'Submit Answers'); }
+    }
+
+    async function confirmIntent() {
+      try {
+        const res = await fetch(`/confirm/${SESSION_ID}`, { method: 'POST' });
+        const data = await res.json();
+        currentStatus = data.status;
+        currentIntent = data.intent;
+        render();
+      } catch (err) { alert('Error: ' + err.message); }
+    }
+
+    async function generateWorkflow() {
+      currentStatus = 'generating';
+      render();
+      try {
+        const res = await fetch('/generate', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: SESSION_ID })
+        });
+        const data = await res.json();
+        if (!res.ok) { currentStatus = 'confirmed'; render(); throw new Error(data.detail || 'Generation failed'); }
+        currentWorkflow = data.workflow;
+        validationResult = data.validationResult;
+        credentialNotes = data.credentialNotes || [];
+        currentStatus = 'generated';
+        render();
+      } catch (err) { alert('Error: ' + err.message); }
+    }
+
+    async function deployWorkflow() {
+      setBtn('deployBtn', true, 'Deploying...');
+      try {
+        const res = await fetch('/deploy', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: SESSION_ID })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Deploy failed');
+        n8nWorkflowId = data.n8nWorkflowId;
+        n8nUrl = data.n8nUrl;
+        credentialNotes = data.credentialNotes || credentialNotes;
+        currentStatus = 'deployed';
+        render();
+      } catch (err) { alert('Error: ' + err.message); setBtn('deployBtn', false, 'Deploy to n8n'); }
+    }
+
+    async function activateWorkflow() {
+      setBtn('activateBtn', true, 'Activating...');
+      try {
+        const res = await fetch('/activate', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: SESSION_ID })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Activation failed');
+        currentStatus = 'active';
+        render();
+      } catch (err) { alert('Error: ' + err.message); setBtn('activateBtn', false, 'Activate Workflow'); }
+    }
+
+    function setBtn(id, disabled, text) {
+      const btn = document.getElementById(id);
+      if (btn) { btn.disabled = disabled; btn.textContent = text; }
+    }
+
+    // Initial render
+    render();
+  </script>
+</body>
+</html>
