@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Two-component system: a Chrome extension that records browser actions, and a FastAPI backend that interprets recordings into structured automation intents using LLMs, generates n8n workflows, and deploys them. This is a POC — no auth, no database, no tests, no deployment.
+Three-component system: a Chrome extension that records browser actions, a FastAPI backend that interprets recordings into structured automation intents using LLMs (generates n8n workflows and deploys them), and a Playwright microservice for browser automation tasks where no API exists. This is a POC — no auth, no tests, no deployment.
 
 ## Commands
 
@@ -18,6 +18,18 @@ cd backend && python server.py
 
 # Or with uvicorn directly
 cd backend && uvicorn server:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### Playwright Service
+```bash
+# Install dependencies
+cd playwright-service && pip install -r requirements.txt
+
+# Install browser
+playwright install chromium
+
+# Run the service (port 3001)
+cd playwright-service && python main.py
 ```
 
 ### Chrome Extension
@@ -36,6 +48,11 @@ Confirmed intent → POST /generate → n8n workflow JSON
         ↓ POST /deploy → n8n REST API
         ↓ POST /activate
 Live workflow on n8n instance
+
+Playwright Service (port 3001) ← n8n HTTP Request nodes
+  → Generates Playwright scripts from intent + recording
+  → Executes scripts headless, returns structured data
+  → Self-heals scripts when they break (LLM patches + retry)
 ```
 
 ### Chrome Extension (`chrome-extension/`)
@@ -55,7 +72,7 @@ Single-file server (`server.py`). Sessions stored in a Python dict — lost on r
 | `POST` | `/clarify` | `{ sessionId, answers }` → LLM refinement |
 | `GET` | `/intent/{id}` | Current intent state |
 | `POST` | `/confirm/{id}` | Force confirm |
-| `POST` | `/generate` | `{ sessionId }` → LLM generates n8n workflow JSON, validates, stores |
+| `POST` | `/generate` | `{ sessionId }` → LLM generates n8n workflow JSON, validates, LLM reviews, stores |
 | `POST` | `/deploy` | `{ sessionId }` → pushes workflow to n8n via REST API |
 | `POST` | `/activate` | `{ sessionId }` → activates workflow on n8n |
 | `GET` | `/workflow/{id}` | Returns generated workflow JSON |
@@ -79,9 +96,15 @@ n8n connection is optional — if unreachable, the UI hides deploy/activate and 
 
 **Start n8n locally:** `npx n8n start` (runs on port 5678). Generate API key: Settings → API → Create API Key.
 
-## Workflow Generation
+## Workflow Generation & Review
 
 `GENERATOR_PROMPT` in server.py instructs the LLM to produce valid n8n workflow JSON. Includes a node type reference table and a complete example workflow. The `/generate` endpoint validates the output with `validator.py` and retries once if invalid.
+
+After generation, the workflow goes through two validation layers:
+1. **Structural validation** (`validator.py`) — checks nodes exist, connections are valid, required fields present, no duplicate names, positions are valid numbers.
+2. **LLM review** (`REVIEW_PROMPT` in server.py) — the LLM reviews the workflow against the original intent for logical correctness: right node types, correct data flow/expressions, complete step coverage, proper parameters, connection order. Returns a verdict (`pass`/`warning`/`fail`), overall score (0-1), and a list of issues with severity, affected node, message, and fix suggestion.
+
+The review is non-blocking — if the LLM review call fails, a fallback "review unavailable" result is stored and the workflow is still shown.
 
 Session statuses: `clarifying` → `confirmed` → `generating` → `generated` → `deployed` → `active`.
 
@@ -107,3 +130,25 @@ Configured via `LLM_PROVIDER` in `backend/.env`. The provider's client is initia
 - **System prompt** (`SYSTEM_PROMPT` in server.py): Instructs LLM to return a specific JSON schema with `intent_summary`, `trigger`, `steps[]`, `data_flow`, `conditions`, `unresolved_questions[]`, `overall_confidence`. Rules: extract ≥70% from evidence, max 3-5 questions, plain English.
 - **CORS**: Fully open (`*`) — intentional for local POC.
 - **Backend URL**: Hardcoded in `popup.js` as `http://localhost:8000`.
+
+## Playwright Automation Service (`playwright-service/`)
+
+Standalone microservice for browser automation where no API exists. n8n calls it via HTTP Request nodes.
+
+**Files:** `main.py` (FastAPI endpoints), `generator.py` (LLM script generation + heal prompts), `executor.py` (Playwright execution), `healer.py` (self-heal orchestration), `storage.py` (SQLite + file system), `llm.py` (LLM abstraction, adapted from backend), `config.py` (env vars).
+
+**Storage:** SQLite (`playwright_service.db`) for metadata. File system (`scripts/{scriptId}/`) for versioned script files. Every version kept on disk (`script_v1.py`, `script_v2.py`, etc.).
+
+**Script lifecycle:** LLM generates `run(page, params) -> dict` function → stored to disk → executed headless by executor (which injects the Playwright `page`) → on failure, self-heal captures error + DOM + screenshot → LLM patches script → retry up to 3 times.
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `POST` | `/scripts/generate` | `{taskId, intent, recording, extract_schema?, config?}` → LLM generates Playwright script |
+| `POST` | `/scripts/{id}/execute` | Run script headless, auto-heal on failure |
+| `GET` | `/scripts/{id}` | Script details + stats |
+| `GET` | `/scripts/{id}/history` | Execution + heal history |
+| `DELETE` | `/scripts/{id}` | Remove script + history |
+| `GET` | `/scripts` | List all scripts |
+| `GET` | `/health` | Service health check |
+
+Configured via `playwright-service/.env`: `PLAYWRIGHT_SERVICE_PORT`, `PLAYWRIGHT_HEADLESS`, `PLAYWRIGHT_TIMEOUT`, `MAX_HEAL_ATTEMPTS`, plus LLM keys (same as backend).

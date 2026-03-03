@@ -56,7 +56,26 @@ python server.py
 
 The server runs at `http://localhost:8000`.
 
-### 5. Load the Chrome extension
+### 5. Set up the Playwright service (optional — needed for browser automation)
+
+```bash
+cd playwright-service
+pip install -r requirements.txt
+playwright install chromium
+```
+
+Configure `playwright-service/.env` — set the same LLM API key as the backend.
+
+Start the service:
+
+```bash
+cd playwright-service
+python main.py
+```
+
+The Playwright service runs at `http://localhost:3001`.
+
+### 6. Load the Chrome extension
 
 1. Open Chrome and go to `chrome://extensions`
 2. Toggle **Developer mode** ON (top right corner)
@@ -96,7 +115,8 @@ After submitting a recording, you'll see:
 
 Once the intent is confirmed, click **Generate n8n Workflow**. The LLM produces a valid n8n workflow JSON. You'll see:
 - A visual node flow (color-coded: green=trigger, blue=action, orange=logic)
-- Validation result (pass/fail)
+- Structural validation result (pass/fail)
+- **LLM Review** — a second LLM pass that checks the workflow against your intent for logical correctness. Shows a score, verdict (pass/warning/fail), and specific issues with fix suggestions
 - Credentials checklist (which accounts need to be connected)
 - Collapsible raw JSON
 
@@ -122,10 +142,22 @@ The workflow is now live and running automatically.
 | POST | `/clarify` | Answer clarifying questions, get refined intent |
 | GET | `/intent/:sessionId` | Get current intent state |
 | POST | `/confirm/:sessionId` | Confirm the intent as final |
-| POST | `/generate` | Generate n8n workflow from confirmed intent |
+| POST | `/generate` | Generate n8n workflow, validate, and LLM review |
 | POST | `/deploy` | Deploy generated workflow to n8n |
 | POST | `/activate` | Activate deployed workflow on n8n |
 | GET | `/workflow/:sessionId` | Get generated workflow JSON |
 | GET | `/workflow/:sessionId/download` | Download workflow as .json file |
 | GET | `/n8n/status` | Check n8n instance connectivity |
 | GET | `/session/:sessionId` | Session wizard page |
+
+### Playwright Service (port 3001)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/scripts/generate` | Generate Playwright script from intent + recording |
+| POST | `/scripts/:scriptId/execute` | Execute script, auto-heals on failure |
+| GET | `/scripts/:scriptId` | Get script details and stats |
+| GET | `/scripts/:scriptId/history` | Get execution and heal history |
+| DELETE | `/scripts/:scriptId` | Delete script and history |
+| GET | `/scripts` | List all scripts |
+| GET | `/health` | Service health check |

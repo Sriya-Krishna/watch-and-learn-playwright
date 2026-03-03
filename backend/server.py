@@ -236,6 +236,42 @@ Connections map source node names to their outputs:
 11. For n8n expression syntax, use: ={{ $json.fieldName }} to reference fields from the previous node."""
 
 
+REVIEW_PROMPT = """You are an n8n workflow reviewer. You receive a generated n8n workflow JSON and the original intent that it was built from. Your job is to check if the workflow correctly implements the intent and identify any issues.
+
+Review the workflow for:
+1. **Correctness**: Does the workflow actually do what the intent describes? Are the right node types used?
+2. **Data flow**: Are fields mapped correctly between nodes? Do expressions reference the right fields (={{ $json.fieldName }})?
+3. **Completeness**: Are any steps from the intent missing in the workflow?
+4. **Node parameters**: Are parameters configured correctly for each node type? Are there obviously wrong or empty values that would cause failures?
+5. **Connection logic**: Are all nodes connected in the right order? Is the trigger appropriate?
+6. **Edge cases**: Are there conditions or error scenarios that should be handled but aren't?
+
+Return ONLY a JSON object with this exact structure:
+{
+  "overall_score": 0.0 to 1.0,
+  "verdict": "pass" | "warning" | "fail",
+  "issues": [
+    {
+      "severity": "error" | "warning" | "info",
+      "node": "Node Name or null",
+      "message": "Clear description of the issue",
+      "suggestion": "How to fix it"
+    }
+  ],
+  "summary": "One-sentence overall assessment"
+}
+
+Rules:
+- "pass" means the workflow looks correct and should work as intended (may have minor info-level notes)
+- "warning" means the workflow will mostly work but has issues that could cause problems
+- "fail" means the workflow has critical errors that will prevent it from working
+- Be specific about which node has the issue and what exactly is wrong
+- Keep suggestions actionable and concrete
+- Don't flag missing credentials — those are expected to be set up separately
+- Don't flag empty document/sheet IDs — those are filled in by the user in n8n
+- IMPORTANT: Return ONLY the JSON object. No markdown, no code fences, no explanation."""
+
+
 class InterpretRequest(BaseModel):
     events: list[dict[str, Any]]
     provider: str | None = None
@@ -426,6 +462,7 @@ async def interpret(req: InterpretRequest):
         "n8nWorkflowId": None,
         "n8nUrl": None,
         "credentialNotes": [],
+        "reviewResult": None,
         "status": "clarifying" if has_questions else "confirmed",
     }
 
@@ -525,9 +562,24 @@ async def generate_workflow(req: GenerateRequest):
             raise HTTPException(status_code=502, detail=f"Failed on retry: {e}")
 
     credential_notes = _extract_credential_notes(workflow)
+
+    # LLM review: check if the workflow correctly implements the intent
+    review_result = None
+    try:
+        review_msg = (
+            f"## Original Intent\n{json.dumps(intent, indent=2)}\n\n"
+            f"## Generated Workflow\n{json.dumps(workflow, indent=2)}"
+        )
+        review_result = call_llm(REVIEW_PROMPT, review_msg, provider=session.get("provider"))
+        print(f"[Review] Verdict: {review_result.get('verdict', 'unknown')} — Score: {review_result.get('overall_score', '?')}")
+    except Exception as e:
+        print(f"[Review] LLM review failed (non-blocking): {e}")
+        review_result = {"verdict": "unknown", "overall_score": None, "issues": [], "summary": f"Review unavailable: {e}"}
+
     session["generatedWorkflow"] = workflow
     session["validationResult"] = validation
     session["credentialNotes"] = credential_notes
+    session["reviewResult"] = review_result
     session["status"] = "generated"
 
     return {
@@ -535,6 +587,7 @@ async def generate_workflow(req: GenerateRequest):
         "workflow": workflow,
         "validationResult": validation,
         "credentialNotes": credential_notes,
+        "reviewResult": review_result,
     }
 
 
@@ -638,6 +691,7 @@ async def session_page(request: Request, session_id: str):
             "n8n_workflow_id": session.get("n8nWorkflowId") or "",
             "n8n_url": session.get("n8nUrl") or "",
             "model_name": LLM_MODELS.get(session.get("provider", LLM_PROVIDER), LLM_PROVIDER),
+            "review_json": json.dumps(session.get("reviewResult")) if session.get("reviewResult") else "null",
         },
     )
 

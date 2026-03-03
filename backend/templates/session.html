@@ -114,6 +114,19 @@
     .validation-badge { padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 600; }
     .validation-pass { background: #e8f5e9; color: #2e7d32; }
     .validation-fail { background: #fce4ec; color: #c62828; }
+    .validation-warning { background: #fff8e1; color: #f57f17; }
+
+    .review-score { font-size: 20px; font-weight: 700; margin-right: 10px; }
+    .review-issue {
+      padding: 10px 12px; border-radius: 6px; margin-bottom: 6px;
+      font-size: 13px; line-height: 1.5;
+    }
+    .review-issue-error { background: #fce4ec; border-left: 3px solid #c62828; }
+    .review-issue-warning { background: #fff8e1; border-left: 3px solid #f57f17; }
+    .review-issue-info { background: #e3f2fd; border-left: 3px solid #1565c0; }
+    .review-issue .issue-node { font-size: 11px; color: #a09890; margin-bottom: 2px; }
+    .review-issue .issue-msg { color: #2d2a26; }
+    .review-issue .issue-fix { color: #6d6560; font-size: 12px; margin-top: 4px; }
 
     .cred-list { list-style: none; }
     .cred-item {
@@ -232,6 +245,16 @@
       <div id="validationDetails" style="margin-top:10px; font-size:13px;"></div>
     </div>
 
+    <div class="section" id="reviewSection">
+      <h2>LLM Review</h2>
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+        <span class="review-score" id="reviewScore"></span>
+        <span class="validation-badge" id="reviewBadge"></span>
+      </div>
+      <div id="reviewSummary" style="font-size:14px; color:#3d3832; margin-bottom:12px;"></div>
+      <div id="reviewIssues"></div>
+    </div>
+
     <div class="section" id="credSection">
       <h2>Credentials Needed</h2>
       <ul class="cred-list" id="credList"></ul>
@@ -290,6 +313,7 @@
     let currentWorkflow = {{ workflow_json | safe }};
     let validationResult = {{ validation_json | safe }};
     let credentialNotes = {{ credential_notes_json | safe }};
+    let reviewResult = {{ review_json | safe }};
     let n8nWorkflowId = "{{ n8n_workflow_id }}";
     let n8nUrl = "{{ n8n_url }}";
     let n8nConnected = false;
@@ -453,6 +477,37 @@
         vDetails.innerHTML = detailHtml;
       }
 
+      // LLM Review
+      const reviewSection = document.getElementById('reviewSection');
+      if (reviewResult && reviewResult.verdict !== 'unknown') {
+        reviewSection.classList.remove('hidden');
+        const score = reviewResult.overall_score;
+        document.getElementById('reviewScore').textContent = score != null ? Math.round(score * 100) + '%' : '—';
+
+        const rBadge = document.getElementById('reviewBadge');
+        if (reviewResult.verdict === 'pass') {
+          rBadge.textContent = 'PASS'; rBadge.className = 'validation-badge validation-pass';
+        } else if (reviewResult.verdict === 'warning') {
+          rBadge.textContent = 'WARNINGS'; rBadge.className = 'validation-badge validation-warning';
+        } else {
+          rBadge.textContent = 'ISSUES'; rBadge.className = 'validation-badge validation-fail';
+        }
+
+        document.getElementById('reviewSummary').textContent = reviewResult.summary || '';
+
+        const issues = reviewResult.issues || [];
+        document.getElementById('reviewIssues').innerHTML = issues.map(i => {
+          const cls = i.severity === 'error' ? 'review-issue-error' : i.severity === 'warning' ? 'review-issue-warning' : 'review-issue-info';
+          return `<div class="review-issue ${cls}">
+            ${i.node ? `<div class="issue-node">Node: ${i.node}</div>` : ''}
+            <div class="issue-msg">${i.severity === 'error' ? '✗' : i.severity === 'warning' ? '⚠' : 'ℹ'} ${i.message}</div>
+            ${i.suggestion ? `<div class="issue-fix">Fix: ${i.suggestion}</div>` : ''}
+          </div>`;
+        }).join('');
+      } else {
+        reviewSection.classList.add('hidden');
+      }
+
       // Credentials
       if (credentialNotes.length > 0) {
         document.getElementById('credSection').classList.remove('hidden');
@@ -551,6 +606,7 @@
         currentWorkflow = data.workflow;
         validationResult = data.validationResult;
         credentialNotes = data.credentialNotes || [];
+        reviewResult = data.reviewResult || null;
         currentStatus = 'generated';
         render();
       } catch (err) { alert('Error: ' + err.message); }
