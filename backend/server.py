@@ -1,6 +1,7 @@
 import json
 import os
 import uuid
+from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
@@ -13,7 +14,7 @@ from pydantic import BaseModel
 
 from validator import validate_workflow
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "anthropic").lower()
 
