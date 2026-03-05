@@ -1,3 +1,13 @@
+# FinCorp Workflow Recorder
+
+> Record browser actions → interpret intent with an LLM → generate and deploy n8n workflows automatically.
+
+<div align="center">
+  <img src="demo_output.gif" alt="Demo: recording browser actions and generating an n8n workflow" width="800" />
+</div>
+
+---
+
 # How to Run
 
 ## Prerequisites
@@ -18,7 +28,7 @@ pip install -r requirements.txt
 
 ### 2. Configure environment
 
-Open `backend/.env` and set:
+Create a `.env` file at the project root and set:
 
 ```
 # LLM provider: "anthropic", "openai", or "kimi"
@@ -64,7 +74,7 @@ pip install -r requirements.txt
 playwright install chromium
 ```
 
-Configure `playwright-service/.env` — set the same LLM API key as the backend.
+The Playwright service shares the root `.env` — no extra configuration needed.
 
 Start the service:
 
