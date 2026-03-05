@@ -1,6 +1,6 @@
-# FinCorp Workflow Recorder
+# Workflow Recorder (Watch and automate)
 
-> Record browser actions → interpret intent with an LLM → generate and deploy n8n workflows automatically.
+> Record browser actions → interpret intent with an LLM → generate and deploy n8n and Playwright workflows automatically.
 
 <div align="center">
   <img src="demo_output.gif" alt="Demo: recording browser actions and generating an n8n workflow" width="800" />
