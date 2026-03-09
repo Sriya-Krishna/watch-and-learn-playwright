@@ -6,6 +6,7 @@
   <img src="demo_output.gif" alt="Demo: recording browser actions and generating an n8n workflow" width="800" />
 </div>
 
+> The above is a demo of Workflow automation for documenting linkedin job postings from gmail to Google Docs with n8n.
 ---
 
 ## Prerequisites
