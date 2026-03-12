@@ -2,17 +2,16 @@
 
 > Record browser actions → interpret intent with an LLM → generate and deploy n8n and Playwright workflows automatically.
 
-Record yourself do a task just once in your browser with our [Browser extention]. 
-The system figures out what you're trying to accomplish, asks a few clarifying questions, and builds a working automation [n8n workflows for API-backed apps, Playwright scripts for everything else]. 
-When a website changes and the script breaks, an LLM patches it automatically.
+- Record yourself do a task just once in your browser with our **Browser extention**. 
+- The system figures out what you're trying to accomplish, asks a few clarifying questions, and builds a working automation **n8n workflows, Playwright scripts**. 
+- When a website changes and the script breaks, an LLM patches it automatically for you.
 
 <div align="center">
   <img src="demo_output.gif" alt="Demo: recording browser actions and generating an n8n workflow" width="800" />
 </div>
 
->
-> The above is a demo of Workflow automation for documenting linkedin job postings from gmail to Google Docs with n8n.
----
+
+> __ The above is a demo of Workflow automation for documenting incoming mail like linkedin job postings from gmail to Google Docs with n8n. __
 
 ## Prerequisites
 
